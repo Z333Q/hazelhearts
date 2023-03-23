@@ -1,92 +1,104 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.9;
+pragma solidity 0.8.19;
 
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./HazelHeartsToken.sol";
 
-contract Farm is Ownable {
-uint public constant MAX_FARMS = 10000;
-uint public constant MAX_TREES = 10;HazelHeartsToken public hazelHeartsToken;
-
-struct FarmData {
-    address owner;
-    uint numHarvests;
-    uint[] treeIds;
-    uint8[] treeHarvestsLeft;
-}
-
-mapping(uint => FarmData) public farms;
-
-constructor(address _hazelHeartsTokenAddress) {
-    hazelHeartsToken = HazelHeartsToken(_hazelHeartsTokenAddress);
-}
-
-function buyFarm() external {
-    require(totalSupply() < MAX_FARMS, "All farms have been sold");
-    require(hazelHeartsToken.balanceOf(msg.sender) >= 5, "You don't have enough HazelHearts tokens");
-    uint tokenId = totalSupply() + 1;
-    _mint(msg.sender, tokenId);
-    farms[tokenId] = FarmData({
-        owner: msg.sender,
-        numHarvests: 0,
-        treeIds: new uint[](MAX_TREES),
-        treeHarvestsLeft: new uint8[](MAX_TREES)
-    });
-    for (uint i = 0; i < MAX_TREES; i++) {
-        farms[tokenId].treeIds[i] = tokenId * MAX_TREES + i + 1;
-        farms[tokenId].treeHarvestsLeft[i] = 2;
-        hazelHeartsToken.mint(address(this), 1);
-        hazelHeartsToken.approve(address(this), tokenId * MAX_TREES + i + 1, 1);
+contract Farm is ERC721, Ownable {
+    struct FarmDetails {
+        uint256 hazelHeartsYield;
+        bool harvestReady;
+        uint256 lastHarvestTime;
+        uint256 processingStartTime;
+        uint256 processingEndTime;
+        uint256 processingBoost;
     }
-    hazelHeartsToken.transferFrom(msg.sender, address(this), 5);
+
+    FarmDetails[] private farms;
+
+    constructor() ERC721("HazelHearts Farm", "HHF") {}
+
+    function createFarm(address to) external onlyOwner returns (uint256) {
+        FarmDetails memory details = FarmDetails({
+            hazelHeartsYield: 0,
+            harvestReady: false,
+            lastHarvestTime: block.timestamp,
+            processingStartTime: 0,
+            processingEndTime: 0,
+            processingBoost: 0
+        });
+        farms.push(details);
+        uint256 tokenId = farms.length - 1;
+        _mint(to, tokenId);
+        return tokenId;
+    }
+
+    function getFarmDetails(uint256 tokenId) public view returns (FarmDetails memory) {
+        return farms[tokenId];
+    }
+
+    function setHazelHeartsYield(uint256 tokenId, uint256 yield) external onlyOwner {
+        farms[tokenId].hazelHeartsYield = yield;
+    }
+
+    function setHarvestReady(uint256 tokenId, bool ready) external onlyOwner {
+        farms[tokenId].harvestReady = ready;
+    }
+
+    function setLastHarvestTime(uint256 tokenId, uint256 time) external onlyOwner {
+        farms[tokenId].lastHarvestTime = time;
+    }
+
+    function setProcessingStartTime(uint256 tokenId, uint256 time) external onlyOwner {
+        farms[tokenId].processingStartTime = time;
+    }
+
+    function setProcessingEndTime(uint256 tokenId, uint256 time) external onlyOwner {
+        farms[tokenId].processingEndTime = time;
+    }
+
+    function setProcessingBoost(uint256 tokenId, uint256 boost) external onlyOwner {
+        farms[tokenId].processingBoost = boost;
+    }
+
+    function tendFarm(uint256 tokenId) external {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner of this farm");
+        FarmDetails storage details = farms[tokenId];
+        require(details.harvestReady == false, "Farm already ready for harvest");
+
+        details.processingBoost = 0;
+        details.lastHarvestTime = block.timestamp;
+        details.harvestReady = true;
+    }
+
+    function harvestFarm(uint256 tokenId) external {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner of this farm");
+        FarmDetails storage details = farms[tokenId];
+        require(details.harvestReady == true, "Farm not ready for harvest");
+
+        uint256 timeSinceLastHarvest = block.timestamp - details.lastHarvestTime;
+        uint256 hazelHeartsYield = details.hazelHeartsYield + details.processingBoost;
+        uint256 newHazelHeartsYield = hazelHeartsYield * timeSinceLastHarvest / 1 days;
+
+        details.hazelHeartsYield = newHazelHeartsYield;
+        details.harvestReady = false;
+    }
+
+    function processFarm(uint256 tokenId) external {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner of this farm");
+        FarmDetails storage details = farms[tokenId];
+        require(details.harvestReady == true, "Farm not ready for harvest");
+        require(details.processingStartTime == 0, "Farm already being processed");
+
+        details.processingStartTime = block.timestamp;
+details.processingEndTime = block.timestamp + 1 days;
+}function boostProcessing(uint256 tokenId, uint256 boost) external {
+    require(ownerOf(tokenId) == msg.sender, "Not the owner of this farm");
+    FarmDetails storage details = farms[tokenId];
+    require(details.harvestReady == true, "Farm not ready for harvest");
+    require(details.processingStartTime != 0, "Farm not being processed");
+
+    details.processingBoost = boost;
 }
 
-function harvestTrees(uint tokenId) external {
-    require(ownerOf(tokenId) == msg.sender, "You don't own this farm");
-    FarmData storage farmData = farms[tokenId];
-    require(farmData.numHarvests < 1 + farmData.treeIds.length, "You've harvested all your trees this month");
-    uint numTokens = 0;
-    for (uint i = 0; i < MAX_TREES; i++) {
-        if (farmData.treeHarvestsLeft[i] > 0) {
-            farmData.treeHarvestsLeft[i]--;
-            numTokens++;
-            if (farmData.treeHarvestsLeft[i] == 0) {
-                hazelHeartsToken.transferFrom(address(this), msg.sender, farmData.treeIds[i]);
-            }
-        }
-    }
-    hazelHeartsToken.transferFrom(address(this), msg.sender, numTokens);
-    farmData.numHarvests++;
-}
-
-function addProcessingEquipment(uint tokenId) external {
-    require(ownerOf(tokenId) == msg.sender, "You don't own this farm");
-    require(hazelHeartsToken.balanceOf(msg.sender) >= 5, "You don't have enough HazelHearts tokens");
-hazelHeartsToken.transferFrom(msg.sender, address(this), 5);
-for (uint i = 0; i < MAX_TREES; i++) {
-hazelHeartsToken.approve(address(this), farms[tokenId].treeIds[i], 2);
-}
-}
-function removeProcessingEquipment(uint tokenId) external {
-    require(ownerOf(tokenId) == msg.sender, "You don't own this farm");
-    for (uint i = 0; i < MAX_TREES; i++) {
-        hazelHeartsToken.approve(address(this), farms[tokenId].treeIds[i], 0);
-    }
-}
-
-function buyFarmUpgrade(uint tokenId) external {
-    require(ownerOf(tokenId) == msg.sender, "You don't own this farm");
-    require(hazelHeartsToken.balanceOf(msg.sender) >= 10, "You don't have enough HazelHearts tokens");
-    uint numTrees = farms[tokenId].treeIds.length;
-    farms[tokenId].treeIds.length = numTrees + MAX_TREES;
-    farms[tokenId].treeHarvestsLeft.length = numTrees + MAX_TREES;
-    for (uint i = numTrees; i < numTrees + MAX_TREES; i++) {
-        farms[tokenId].treeIds[i] = tokenId * MAX_TREES + i + 1;
-        farms[tokenId].treeHarvestsLeft[i] = 2;
-        hazelHeartsToken.mint(address(this), 1);
-        hazelHeartsToken.approve(address(this), tokenId * MAX_TREES + i + 1, 1);
-    }
-    hazelHeartsToken.transferFrom(msg.sender, address(this), 10);
-}
-}
