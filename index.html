@@ -1,15 +1,42 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <title>HazelHearts Game</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/17.0.2/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/17.0.2/umd/react-dom.production.min.js"></script>
-    <script src="./app.js"></script>
-  </body>
+<head>
+  <title>HAZELHEARTS MVP SIM</title>
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+    }
+    canvas {
+      display: block;
+      border: 1px solid black;
+    }
+    #dashboard {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+    }
+    #notifications {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="dashboard">
+    <div>Water: <span id="water">100</span></div>
+    <div>Fertilizer: <span id="fertilizer">100</span></div>
+  </div>
+  <div id="notifications"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/6.2.0/pixi.min.js"></script>
+  <script src="app.js"></script>
+</body>
 </html>
