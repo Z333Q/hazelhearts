@@ -1,0 +1,573 @@
+const config = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 1200,
+  physics: {
+    default: 'arcade',
+    arcade: {
+      gravity: { y: 300 },
+      debug: false
+    }
+  },
+  scene: {
+    preload: preload,
+    create: create,
+    update: update
+  }
+};
+
+const game = new Phaser.Game(config);
+
+let platforms;
+let player;
+let cursors;
+let stars;
+let bombs;
+let score = 0;
+let gameOver = false;
+
+// Game Dynamics
+let tokens = 0;
+let rareTreeCount = 0;
+let commonTreeCount = 0;
+let rareTreeUpgradeCost = 100;
+let commonTreeUpgradeCost = 50;
+let landPurchaseCost = 500;
+let resourceCost = 50;
+let maxLand = 10;
+let maxRareTrees = 10;
+let maxCommonTrees = 20;
+let rareTreeBreedingCostMin = 50;
+let rareTreeBreedingCostMax = 200;
+let commonTreeBreedingCostMin = 25;
+let commonTreeBreedingCostMax = 100;
+let rareTreeBreedingCost = Math.floor(Math.random() * (rareTreeBreedingCostMax - rareTreeBreedingCostMin + 1)) + rareTreeBreedingCostMin;
+let commonTreeBreedingCost = Math.floor(Math.random() * (commonTreeBreedingCostMax - commonTreeBreedingCostMin + 1)) + commonTreeBreedingCostMin;
+let guildQuestReward = 250;
+let educationalQuestRewardMin = 50;
+let educationalQuestRewardMax = 150;
+let educationalQuestsCompleted = 0;
+let maxEducationalQuests = 3;
+let educationalQuests = [];
+let protectiveMeasures = 0;
+let protectiveMeasureCostMin = 100;
+let protectiveMeasureCostMax = 500;
+let protectiveMeasureCost = Math.floor(Math.random() * (protectiveMeasureCostMax - protectiveMeasureCostMin + 1)) + protectiveMeasureCostMin;
+
+function preload() {
+  this.load.image('sky', 'assets/sky.png');
+  this.load.image('ground', 'assets/platform.png');
+  this.load.image('star', 'assets/star.png');
+  this.load.image('bomb', 'assets/bomb.png');
+  this.load.image('purchase-land-button', 'assets/purchase-land-button.png');
+  this.load.image('purchase-resources-button', 'assets/purchase-resources-button.png');
+  this.load.image('upgrade-rare-trees-button', 'assets/upgrade-rare-trees-button.png');
+  this.load.image('upgrade-common-trees-button', 'assets/upgrade-common-trees-button.png');
+  this.load.image('breeding-button', 'assets/breeding-button.png');
+  this.load.image('guild-quest-button', 'assets/guild-quest-button.png');
+  this.load.image('educational-quest-button', 'assets/educational-quest-button.png');
+  this.load.image('protective-measure-button', 'assets/protective-measure-button.png');
+  this.load.image('tree', 'assets/tree.png');
+  this.load.image('rare-tree', 'assets/rare-tree.png');
+}
+
+function create() {
+  // Add game background
+  this.add.image(400, 600, 'sky');
+
+  // Add game platforms
+  platforms = this.physics.add.staticGroup();
+  platforms.create(400, 1100, 'ground').setScale(2).refreshBody();
+  platforms.create(600, 800, 'ground');
+  platforms.create(50, 600, 'ground');
+ // Add game platforms
+platforms = this.physics.add.staticGroup();
+platforms.create(400, 1100, 'ground').setScale(2).refreshBody();
+platforms.create(600, 800, 'ground');
+platforms.create(50, 600, 'ground');
+
+// Add player sprite and physics
+player = this.physics.add.sprite(100, 450, 'dude');
+player.setBounce(0.2);
+player.setCollideWorldBounds(true);
+
+// Add player animations
+this.anims.create({
+key: 'left',
+frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+frameRate: 10,
+repeat: -1
+});
+
+this.anims.create({
+key: 'turn',
+frames: [ { key: 'dude', frame: 4 } ],
+frameRate: 20
+});
+
+this.anims.create({
+key: 'right',
+frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+frameRate: 10,
+repeat: -1
+});
+
+// Add stars group and physics
+stars = this.physics.add.group({
+key: 'star',
+repeat: 11,
+setXY: { x: 12, y: 0, stepX: 70 }
+});
+
+stars.children.iterate((child) => {
+child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+});
+
+// Add bombs group and physics
+bombs = this.physics.add.group();
+
+// Initialize game text and UI elements
+const tokensText = this.add.text(16, 16, 'Tokens: 0', { fontSize: '32px', fill: '#000' });
+const treesOwnedText = this.add.text(16, 50, 'Trees Owned: 0', { fontSize: '32px', fill: '#000' });
+const rareTreeCountText = this.add.text(16, 100, 'Rare Trees: 0', { fontSize: '32px', fill: '#000' });
+const commonTreeCountText = this.add.text(16, 150, 'Common Trees: 0', { fontSize: '32px', fill: '#000' });
+const rareTreeUpgradeText = this.add.text(16, 200, 'Upgrade Rare Trees (20 tokens)', { fontSize: '32px', fill: '#000' });
+const commonTreeUpgradeText = this.add.text(16, 250, 'Upgrade Common Trees (10 tokens)', { fontSize: '32px', fill: '#000' });
+const purchaseLandText = this.add.text(16, 300, 'Purchase Land (50 tokens)', { fontSize: '32px', fill: '#000' });
+const resourceText = this.add.text(16, 350, 'Purchase Resources (10 tokens)', { fontSize: '32px', fill: '#000' });
+const questText = this.add.text(16, 400, 'Complete Quest (+5 tokens)', { fontSize: '32px', fill: '#000' });
+const guildQuestText = this.add.text(16, 450, 'Complete Guild Quest (+10 tokens)', { fontSize: '32px', fill: '#000' });
+const educationalQuestText = this.add.text(16, 500, 'Complete Educational Quest (+15 tokens)', { fontSize: '32px', fill: '#000' });
+const protectiveMeasureText = this.add.text(16, 550, 'Protective Measures: 0', { fontSize: '32px', fill: '#000' });
+
+// Add rare tree button
+const rareTreeButton = this.add.image(700, 50, 'rare-tree-button');
+rareTreeButton.setScale(0.5);
+rareTreeButton.setInteractive();
+rareTreeButton.on('pointerdown', () => {
+if (tokens >= rareTreeCost) {
+tokens -= rareTreeCost;
+rareTreeCount++;
+rareTreeCost = Math.floor(Math.random() * (rareTreeCostMax - rareTreeCostMin + 1)) + rareTreeCostMin;
+rareTreeCountText.setText('Rare Trees: ' + rareTreeCount);
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add common tree button
+const commonTreeButton = this.add.image(700, 100, 'common-tree-button');
+commonTreeButton.setScale(0.5);
+commonTreeButton.setInteractive();
+commonTreeButton.on('pointerdown', () => {
+if (tokens >= commonTreeCost) {
+tokens -= commonTreeCost;
+commonTreeCount++;
+commonTreeCost = Math.floor(Math.random() * (commonTreeCostMax - commonTreeCostMin + 1)) + commonTreeCostMin;
+commonTreeCountText.setText('Common Trees: ' + commonTreeCount);
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add rare tree upgrade button
+const rareTreeUpgradeButton = this.add.image(700, 200, 'upgrade-button');
+rareTreeUpgradeButton.setScale(0.5);
+rareTreeUpgradeButton.setInteractive();
+rareTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= rareTreeUpgradeCost) {
+tokens -= rareTreeUpgradeCost;
+rareTreeUpgradeCost *= 2;
+rareTreeGrowthRate++;
+rareTreeUpgradeText.setText('Upgrade Rare Trees (' + rareTreeUpgradeCost + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add common tree upgrade button
+const commonTreeUpgradeButton = this.add.image(700, 250, 'upgrade-button');
+commonTreeUpgradeButton.setScale(0.5);
+commonTreeUpgradeButton.setInteractive();
+commonTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= commonTreeUpgradeCost) {
+tokens -= commonTreeUpgradeCost;
+commonTreeUpgradeCost *= 2;
+commonTreeGrowthRate++;
+commonTreeUpgradeText.setText('Upgrade Common Trees (' + commonTreeUpgradeCost + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add purchase land button
+const purchaseLandButton = this.add.image(700, 300, 'purchase-land-button');
+purchaseLandButton.setScale(0.5);
+purchaseLandButton.setInteractive();
+purchaseLandButton.on('pointerdown', () => {
+if (tokens >= landPurchaseCost) {
+tokens -= landPurchaseCost;
+landPurchaseCost = Math.floor(Math.random() * (landPurchaseCostMax - landPurchaseCostMin + 1)) + landPurchaseCostMin;
+landCount++;
+purchaseLandText.setText('Purchase Land (' + landPurchaseCost + ' tokens)');
+treesOwnedText.setText('Trees Owned: ' + (rareTreeCount + commonTreeCount + landCount));
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add resource button
+const resourceButton = this.add.image(700, 350, 'resource-button');
+resourceButton.setScale(0.5);
+resourceButton.setInteractive();
+resourceButton.on('pointerdown', () => {
+if (tokens >= resourceCost) {
+tokens -= resourceCost;
+resourceCount++;
+resourceCost = Math.floor(Math.random() * (resourceCostMax - resourceCostMin + 1)) + resourceCostMin;
+resourceText.setText('Purchase Resources(+1, Cost: ${resourceCost} tokens)');
+}
+});
+
+// Add quest button
+const questButton = this.add.image(700, 400, 'quest-button');
+questButton.setScale(0.5);
+questButton.setInteractive();
+questButton.on('pointerdown', () => {
+tokens += questReward;
+questText.setText('Complete Quest (+5 tokens)');
+});
+
+// Add guild quest button
+const guildQuestButton = this.add.image(700, 450, 'guild-quest-button');
+guildQuestButton.setScale(0.5);
+guildQuestButton.setInteractive();
+guildQuestButton.on('pointerdown', () => {
+tokens += guildQuestReward;
+guildQuestText.setText('Complete Guild Quest (+10 tokens)');
+});
+
+// Add educational quest button
+const educationalQuestButton = this.add.image(700, 500, 'educational-quest-button');
+educationalQuestButton.setScale(0.5);
+educationalQuestButton.setInteractive();
+educationalQuestButton.on('pointerdown', () => {
+if (educationalQuestsCompleted < maxEducationalQuests) {
+const difficulty = Math.floor(Math.random() * (maxDifficulty - minDifficulty + 1)) + minDifficulty;
+const reward = Math.floor(Math.random() * (educationalQuestRewardMax - educationalQuestRewardMin + 1)) + educationalQuestRewardMin;
+const quest = { difficulty, reward, completed: false };
+educationalQuests.push(quest);
+educationalQuestText.setText('Complete Educational Quest (+${reward} tokens)');
+}
+});
+
+// Add protective measure button
+const protectiveMeasureButton = this.add.image(700, 550, 'protective-measure-button');
+protectiveMeasureButton.setScale(0.5);
+protectiveMeasureButton.setInteractive();
+protectiveMeasureButton.on('pointerdown', () => {
+if (tokens >= protectiveMeasureCost) {
+tokens -= protectiveMeasureCost;
+protectiveMeasures++;
+protectiveMeasureCost = Math.floor(Math.random() * (protectiveMeasureCostMax - protectiveMeasureCostMin + 1)) + protectiveMeasureCostMin;
+protectiveMeasureText.setText(Protective Measures: ${protectiveMeasures} (Cost: ${protectiveMeasureCost} tokens));
+}
+});
+
+// Add breeding button
+const breedingButton = this.add.image(700, 200, 'breeding-button');
+breedingButton.setScale(0.5);
+breedingButton.setInteractive();
+breedingButton.on('pointerdown', () => {
+if (tokens >= rareTreeBreedingCost && rareTreeCount > 1) {
+tokens -= rareTreeBreedingCost;
+rareTreeCount--;
+rareTreeCount += Math.floor(Math.random() * 3);
+rareTreeBreedingCost = Math.floor(Math.random() * (rareTreeBreedingCostMax - rareTreeBreedingCostMin + 1)) + rareTreeBreedingCostMin;
+breedingText.setText(Breeding Rare Trees (+${rareTreeCount - 1}, Cost: ${rareTreeBreedingCost} tokens));
+} else if (tokens >= commonTreeBreedingCost && commonTreeCount > 1) {
+tokens -= commonTreeBreedingCost;
+commonTreeCount--;
+commonTreeCount += Math.floor(Math.random() * 3);
+commonTreeBreedingCost = Math.floor(Math.random() * (commonTreeBreedingCostMax - commonTreeBreedingCostMin + 1)) + commonTreeBreedingCostMin;
+breedingText.setText(Breeding Common Trees (+${commonTreeCount - 1}, Cost: ${commonTreeBreedingCost} tokens));
+}
+});
+
+// Add rare tree upgrade button
+const rareTreeUpgradeButton = this.add.image(700, 50, 'upgrade-button');
+rareTreeUpgradeButton.setScale(0.5);
+rareTreeUpgradeButton.setInteractive();
+rareTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= rareTreeUpgradeCost && rareTreeUpgradeLevel < maxTreeLevel) {
+tokens -= rareTreeUpgradeCost;
+rareTreeUpgradeCost += rareTreeUpgradeCostIncrease;
+rareTreeUpgradeLevel++;
+rareTreeCost = rareTreeBaseCost * rareTreeUpgradeLevel;
+rareTreeUpgradeText.setText(Upgrade Rare Trees (${rareTreeUpgradeCost} tokens));
+rareTreeCostText.setText(Cost: ${rareTreeCost} resources);
+}
+});
+
+// Add common tree upgrade button
+const commonTreeUpgradeButton = this.add.image(700, 100, 'upgrade-button');
+commonTreeUpgradeButton.setScale(0.5);
+commonTreeUpgradeButton.setInteractive();
+commonTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= commonTreeUpgradeCost && commonTreeUpgradeLevel < maxTreeLevel) {
+tokens -= commonTreeUpgradeCost;
+commonTreeUpgradeCost += commonTreeUpgradeCostIncrease;
+commonTreeUpgradeLevel++;
+commonTreeCost = commonTreeBaseCost * commonTreeUpgradeLevel;
+commonTreeUpgradeText.setText(Upgrade Common Trees (${commonTreeUpgradeCost} tokens));
+commonTreeCostText.setText(Cost: ${commonTreeCost} resources);
+}
+});
+
+// Add purchase land button
+const purchaseLandButton = this.add.image(700, 150, 'purchase-land-button');
+purchaseLandButton.setScale(0.5);
+purchaseLandButton.setInteractive();
+purchaseLandButton.on('pointerdown', () => {
+if (tokens >= landPurchaseCost) {
+tokens -= landPurchaseCost;
+landPurchaseCost = Math.floor(Math.random() * (landPurchaseCostMax - landPurchaseCostMin + 1)) + landPurchaseCostMin;
+landOwned++;
+purchaseLandText.setText(Purchase Land (${landPurchaseCost} tokens));
+landOwnedText.setText(Land Owned: ${landOwned});
+}
+});
+
+// Add quest button
+const questButton = this.add.image(700, 200, 'quest-button');
+questButton.setScale(0.5);
+questButton.setInteractive();
+questButton.on('pointerdown', () => {
+questCompleted = true;
+tokens += questReward;
+questReward += questRewardIncrease;
+questText.setText(Complete Quest (+${questReward} tokens));
+tokensText.setText(Tokens: ${tokens});
+});
+
+// Add guild quest button
+const guildQuestButton = this.add.image(700, 250, 'guild-quest-button');
+guildQuestButton.setScale(0.5);
+guildQuestButton.setInteractive();
+guildQuestButton.on('pointerdown', () => {
+guildQuestCompleted = true;
+tokens += guildQuestReward;
+guildQuestReward += guildQuestRewardIncrease;
+guildQuestText.setText(Complete Guild Quest (+${guildQuestReward} tokens));
+tokensText.setText(Tokens: ${tokens});
+});
+
+// Add educational quest button
+const educationalQuestButton = this.add.image(700, 300, 'educational-quest-button');
+educationalQuestButton.setScale(0.5);
+educationalQuestButton.setInteractive();
+educationalQuestButton.on('pointerdown', () => {
+if (educationalQuestsCompleted < maxEducationalQuests) {
+const difficulty = Math.floor(Math.random() * (maxDifficulty - minDifficulty + 1)) + minDifficulty;
+const reward = Math.floor(Math.random() * (educationalQuestRewardMax - educationalQuestRewardMin + 1)) + educationalQuestRewardMin;
+const quest = { difficulty, reward, completed: false };
+educationalQuests.push(quest);
+educationalQuestText.setText(Complete Educational Quest (+${reward} tokens));
+// Add protective measure button
+const protectiveMeasureButton = this.add.image(700, 350, 'protective-measure-button');
+protectiveMeasureButton.setScale(0.5);
+protectiveMeasureButton.setInteractive();
+protectiveMeasureButton.on('pointerdown', () => {
+if (tokens >= protectiveMeasureCost) {
+tokens -= protectiveMeasureCost;
+protectiveMeasures++;
+protectiveMeasureCost = Math.floor(Math.random() * (protectiveMeasureCostMax - protectiveMeasureCostMin + 1)) + protectiveMeasureCostMin;
+protectiveMeasureText.setText('Protective Measures: ' + protectiveMeasures + ' (Cost: ' + protectiveMeasureCost + ' tokens)');
+}
+});
+
+// Create Phaser game instance
+const game = new Phaser.Game({
+type: Phaser.AUTO,
+parent: 'game-container',
+width: 800,
+height: 600,
+physics: {
+default: 'arcade',
+arcade: {
+gravity: { y: 300 },
+debug: false,
+},
+},
+scene: {
+preload: preload,
+create: create,
+update: update,
+},
+});
+
+function preload() {
+this.load.image('background', 'assets/background.png');
+this.load.image('ground', 'assets/platform.png');
+this.load.image('star', 'assets/star.png');
+this.load.image('bomb', 'assets/bomb.png');
+this.load.image('tree', 'assets/tree.png');
+this.load.image('rare-tree', 'assets/rare-tree.png');
+this.load.image('purchase-land-button', 'assets/purchase-land-button.png');
+this.load.image('upgrade-button', 'assets/upgrade-button.png');
+this.load.image('rare-tree-button', 'assets/rare-tree-button.png');
+this.load.image('common-tree-button', 'assets/common-tree-button.png');
+this.load.image('guild-quest-button', 'assets/guild-quest-button.png');
+this.load.image('educational-quest-button', 'assets/educational-quest-button.png');
+this.load.image('protective-measure-button', 'assets/protective-measure-button.png');
+this.load.image('resource-button', 'assets/resource-button.png');
+}
+
+function create() {
+// Add background
+this.add.image(400, 300, 'background');
+
+// Add game platforms
+platforms = this.physics.add.staticGroup();
+platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+platforms.create(600, 400, 'ground');
+platforms.create(50, 250, 'ground');
+
+// Add player sprite
+player = this.physics.add.sprite(100, 450, 'tree');
+player.setBounce(0.2);
+player.setCollideWorldBounds(true);
+
+this.add.text(16, 100, 'Rare Trees: ' + rareTreeCount, { fontSize: '32px', fill: '#000' });
+const commonTreeCountText = this.add.text(16, 150, 'Common Trees: ' + commonTreeCount, { fontSize: '32px', fill: '#000' });
+const rareTreeUpgradeText = this.add.text(16, 200, 'Upgrade Rare Trees (' + rareTreeUpgradeCost + ' tokens)', { fontSize: '32px', fill: '#000' });
+const commonTreeUpgradeText = this.add.text(16, 250, 'Upgrade Common Trees (' + commonTreeUpgradeCost + ' tokens)', { fontSize: '32px', fill: '#000' });
+const purchaseLandText = this.add.text(16, 300, 'Purchase Land (' + landPurchaseCost + ' tokens)', { fontSize: '32px', fill: '#000' });
+const resourceText = this.add.text(16, 350, 'Purchase Resources (' + resourceCost + ' tokens)', { fontSize: '32px', fill: '#000' });
+const questText = this.add.text(16, 400, 'Complete Quest (+' + questReward + ' tokens)', { fontSize: '32px', fill: '#000' });
+const guildQuestText = this.add.text(16, 450, 'Complete Guild Quest (+' + guildQuestReward + ' tokens)', { fontSize: '32px', fill: '#000' });
+const educationalQuestText = this.add.text(16, 500, 'Complete Educational Quest (+' + educationalQuestReward + ' tokens)', { fontSize: '32px', fill: '#000' });
+const protectiveMeasureText = this.add.text(16, 550, 'Protective Measures: ' + protectiveMeasures, { fontSize: '32px', fill: '#000' });
+
+// Add rare tree button
+const rareTreeButton = this.add.image(700, 50, 'rare-tree-button');
+rareTreeButton.setScale(0.5);
+rareTreeButton.setInteractive();
+rareTreeButton.on('pointerdown', () => {
+if (tokens >= rareTreeCost) {
+tokens -= rareTreeCost;
+rareTreeCount++;
+rareTreeCost = Math.floor(Math.random() * (rareTreeCostMax - rareTreeCostMin + 1)) + rareTreeCostMin;
+rareTreeCountText.setText('Rare Trees: ' + rareTreeCount);
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add common tree button
+const commonTreeButton = this.add.image(700, 100, 'common-tree-button');
+commonTreeButton.setScale(0.5);
+commonTreeButton.setInteractive();
+commonTreeButton.on('pointerdown', () => {
+if (tokens >= commonTreeCost) {
+tokens -= commonTreeCost;
+commonTreeCount++;
+commonTreeCost = Math.floor(Math.random() * (commonTreeCostMax - commonTreeCostMin + 1)) + commonTreeCostMin;
+commonTreeCountText.setText('Common Trees: ' + commonTreeCount);
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add rare tree upgrade button
+const rareTreeUpgradeButton = this.add.image(700, 150, 'upgrade-button');
+rareTreeUpgradeButton.setScale(0.5);
+rareTreeUpgradeButton.setInteractive();
+rareTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= rareTreeUpgradeCost) {
+tokens -= rareTreeUpgradeCost;
+rareTreeUpgradeCost += 20;
+rareTreeSellValue += 5;
+rareTreeUpgradeText.setText('Upgrade Rare Trees (' + rareTreeUpgradeCost + ' tokens)');
+tokensText.setText('
+// Add common tree upgrade button
+const commonTreeUpgradeButton = this.add.image(700, 200, 'upgrade-button');
+commonTreeUpgradeButton.setScale(0.5);
+commonTreeUpgradeButton.setInteractive();
+commonTreeUpgradeButton.on('pointerdown', () => {
+if (tokens >= commonTreeUpgradeCost) {
+tokens -= commonTreeUpgradeCost;
+commonTreeUpgradeCost += 10;
+commonTreeSellValue += 2;
+commonTreeUpgradeText.setText('Upgrade Common Trees (' + commonTreeUpgradeCost + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add purchase land button
+const purchaseLandButton = this.add.image(700, 250, 'purchase-land-button');
+purchaseLandButton.setScale(0.5);
+purchaseLandButton.setInteractive();
+purchaseLandButton.on('pointerdown', () => {
+if (tokens >= landPurchaseCost) {
+tokens -= landPurchaseCost;
+landPurchaseCost += 50;
+landOwned++;
+treesOwnedText.setText('Trees Owned: ' + (rareTreeCount + commonTreeCount + landOwned * 10));
+purchaseLandText.setText('Purchase Land (' + landPurchaseCost + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add resource button
+const resourceButton = this.add.image(700, 300, 'resource-button');
+resourceButton.setScale(0.5);
+resourceButton.setInteractive();
+resourceButton.on('pointerdown', () => {
+if (tokens >= resourceCost) {
+tokens -= resourceCost;
+resourceCount++;
+resourceCost += 10;
+resourceText.setText('Purchase Resources (' + resourceCost + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add quest button
+const questButton = this.add.image(700, 350, 'quest-button');
+questButton.setScale(0.5);
+questButton.setInteractive();
+questButton.on('pointerdown', () => {
+tokens += questReward;
+questText.setText('Complete Quest (+' + questReward + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+});
+
+// Add guild quest button
+const guildQuestButton = this.add.image(700, 400, 'guild-quest-button');
+guildQuestButton.setScale(0.5);
+guildQuestButton.setInteractive();
+guildQuestButton.on('pointerdown', () => {
+tokens += guildQuestReward;
+guildQuestText.setText('Complete Guild Quest (+' + guildQuestReward + ' tokens)');
+tokensText.setText('Tokens: ' + tokens);
+});
+
+// Add educational quest button
+const educationalQuestButton = this.add.image(700, 450, 'educational-quest-button');
+educationalQuestButton.setScale(0.5);
+educationalQuestButton.setInteractive();
+educationalQuestButton.on('pointerdown', () => {
+if (educationalQuestsCompleted < maxEducationalQuests) {
+const difficulty = Math.floor(Math.random() * (maxDifficulty - minDifficulty + 1)) + minDifficulty;
+const reward = Math.floor(Math.random() * (educationalQuestRewardMax - educationalQuestRewardMin + 1)) + educationalQuestRewardMin;
+const quest = { difficulty, reward, completed: false };
+educationalQuests.push(quest);
+educationalQuestText.setText('Complete Educational Quest (+' + reward + ' tokens)');
+tokens += reward;
+tokensText.setText('Tokens: ' + tokens);
+}
+});
+
+// Add protective measure button
+const protectiveMeasureButton = this.add.image(700, 500, 'protective-measure-button');
+protectiveMeasureButton.setScale(0.5);
+protectiveMeasureButton.setInteractive();
+protectiveMeasureButton.on('pointerdown', () => {
+if (tokens >= protectiveMeasureCost) {
+tokens -= protectiveMeasureCost;
+protectiveMeasures++;
+protectiveMeasureCost += 50;
